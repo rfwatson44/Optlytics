@@ -7,23 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface MetaAccountData {
-  name: string;
-  account_status: number;
-  amount_spent: number;
-  balance: number;
-  currency: string;
-  insights?: {
-    impressions: number;
-    clicks: number;
-    reach: number;
-    conversions: number;
-    cpc: number;
-    cpm: number;
-    website_purchase_roas: number;
-  };
-}
-
 interface MetaCampaignData {
   campaign: {
     id: string;
@@ -40,6 +23,40 @@ interface MetaCampaignData {
     spend: number;
     conversions: number;
   };
+  adSets: {
+    adSet: {
+      id: string;
+      name: string;
+      status: string;
+      daily_budget: number;
+      lifetime_budget: number;
+      bid_amount: number;
+      billing_event: string;
+      optimization_goal: string;
+    };
+    insights: {
+      impressions: number;
+      clicks: number;
+      reach: number;
+      spend: number;
+      conversions: number;
+    };
+    ads: {
+      ad: {
+        id: string;
+        name: string;
+        status: string;
+        creative: Record<string, unknown>;
+      };
+      insights: {
+        impressions: number;
+        clicks: number;
+        reach: number;
+        spend: number;
+        conversions: number;
+      };
+    }[];
+  }[];
 }
 
 export default function MetaMarketingPage() {
@@ -212,39 +229,156 @@ export default function MetaMarketingPage() {
               {campaignData.result.map((item: MetaCampaignData) => (
                 <Card key={item.campaign.id}>
                   <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-6">
+                      {/* Campaign Info */}
                       <div>
-                        <h3 className="font-semibold">Campaign Name</h3>
-                        <p>{item.campaign.name}</p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">Status</h3>
-                        <p className="capitalize">
-                          {item.campaign.status.toLowerCase()}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">Objective</h3>
-                        <p className="capitalize">
-                          {item.campaign.objective.toLowerCase()}
-                        </p>
-                      </div>
-                      {item.insights && (
-                        <>
+                        <h3 className="text-lg font-semibold mb-4">
+                          Campaign Details
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           <div>
-                            <h3 className="font-semibold">Impressions</h3>
-                            <p>{item.insights.impressions?.toLocaleString()}</p>
+                            <h4 className="font-semibold">Campaign Name</h4>
+                            <p>{item.campaign.name}</p>
                           </div>
                           <div>
-                            <h3 className="font-semibold">Clicks</h3>
-                            <p>{item.insights.clicks?.toLocaleString()}</p>
+                            <h4 className="font-semibold">Status</h4>
+                            <p className="capitalize">
+                              {item.campaign.status.toLowerCase()}
+                            </p>
                           </div>
                           <div>
-                            <h3 className="font-semibold">Spend</h3>
-                            <p>{formatCurrency(item.insights.spend)}</p>
+                            <h4 className="font-semibold">Objective</h4>
+                            <p className="capitalize">
+                              {item.campaign.objective.toLowerCase()}
+                            </p>
                           </div>
-                        </>
-                      )}
+                          {item.insights && (
+                            <>
+                              <div>
+                                <h4 className="font-semibold">Impressions</h4>
+                                <p>
+                                  {item.insights.impressions?.toLocaleString()}
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">Clicks</h4>
+                                <p>{item.insights.clicks?.toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">Spend</h4>
+                                <p>{formatCurrency(item.insights.spend)}</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Ad Sets */}
+                      {item.adSets.map((adSetData) => (
+                        <div key={adSetData.adSet.id} className="border-t pt-6">
+                          <h3 className="text-lg font-semibold mb-4">
+                            Ad Set: {adSetData.adSet.name}
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                            <div>
+                              <h4 className="font-semibold">Status</h4>
+                              <p className="capitalize">
+                                {adSetData.adSet.status.toLowerCase()}
+                              </p>
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">Daily Budget</h4>
+                              <p>
+                                {formatCurrency(adSetData.adSet.daily_budget)}
+                              </p>
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">Bid Amount</h4>
+                              <p>
+                                {formatCurrency(adSetData.adSet.bid_amount)}
+                              </p>
+                            </div>
+                            {adSetData.insights && (
+                              <>
+                                <div>
+                                  <h4 className="font-semibold">Impressions</h4>
+                                  <p>
+                                    {adSetData.insights.impressions?.toLocaleString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold">Clicks</h4>
+                                  <p>
+                                    {adSetData.insights.clicks?.toLocaleString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold">Spend</h4>
+                                  <p>
+                                    {formatCurrency(adSetData.insights.spend)}
+                                  </p>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Ads */}
+                          <div className="pl-4 border-l">
+                            <h4 className="text-md font-semibold mb-4">Ads</h4>
+                            <div className="grid gap-4">
+                              {adSetData.ads.map((adData) => (
+                                <div
+                                  key={adData.ad.id}
+                                  className="bg-gray-50 p-4 rounded-lg"
+                                >
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                      <h5 className="font-semibold">Ad Name</h5>
+                                      <p>{adData.ad.name}</p>
+                                    </div>
+                                    <div>
+                                      <h5 className="font-semibold">Status</h5>
+                                      <p className="capitalize">
+                                        {adData.ad.status.toLowerCase()}
+                                      </p>
+                                    </div>
+                                    {adData.insights && (
+                                      <>
+                                        <div>
+                                          <h5 className="font-semibold">
+                                            Impressions
+                                          </h5>
+                                          <p>
+                                            {adData.insights.impressions?.toLocaleString()}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <h5 className="font-semibold">
+                                            Clicks
+                                          </h5>
+                                          <p>
+                                            {adData.insights.clicks?.toLocaleString()}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <h5 className="font-semibold">
+                                            Spend
+                                          </h5>
+                                          <p>
+                                            {formatCurrency(
+                                              adData.insights.spend
+                                            )}
+                                          </p>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>

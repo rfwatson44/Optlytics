@@ -7,6 +7,24 @@ const META_CONFIG = {
   accessToken: process.env.META_ACCESS_TOKEN!,
 };
 
+interface MetaAd {
+  id: string;
+  name: string;
+  status: string;
+  creative: Record<string, unknown>;
+  tracking_specs: Record<string, unknown>;
+  conversion_specs: Record<string, unknown>;
+}
+
+interface MetaInsights {
+  impressions?: string;
+  clicks?: string;
+  reach?: string;
+  spend?: string;
+  conversions?: string | Record<string, unknown>;
+  actions?: Record<string, unknown>[] | Record<string, unknown>;
+}
+
 // Initialize the API
 function initializeApi(accessToken: string) {
   const api = FacebookAdsApi.init(accessToken);
@@ -278,6 +296,33 @@ export async function GET(request: Request) {
           }))
         );
 
+        // Store ads data in Supabase
+        const adsForSupabase = campaignData.flatMap(({ adSets }) =>
+          adSets.flatMap(({ adSet, ads }) =>
+            ads.map(
+              ({ ad, insights }: { ad: MetaAd; insights: MetaInsights }) => ({
+                ad_id: ad.id,
+                ad_set_id: adSet.id,
+                name: ad.name,
+                status: ad.status,
+                creative: ad.creative || {},
+                tracking_specs: ad.tracking_specs || {},
+                conversion_specs: ad.conversion_specs || {},
+                impressions: parseInt(insights?.impressions ?? "0") || 0,
+                clicks: parseInt(insights?.clicks ?? "0") || 0,
+                reach: parseInt(insights?.reach ?? "0") || 0,
+                spend: parseFloat(insights?.spend ?? "0") || 0,
+                conversions: formatConversions(insights?.actions),
+                cost_per_conversion:
+                  insights?.spend && insights?.conversions
+                    ? parseFloat(insights.spend) /
+                      parseInt((insights.conversions as string) ?? "0")
+                    : 0,
+              })
+            )
+          )
+        );
+
         // Store in Supabase
         const { error: campaignError } = await supabase
           .from("meta_campaigns")
@@ -297,6 +342,16 @@ export async function GET(request: Request) {
 
         if (adSetError) {
           console.error("Supabase error (ad sets):", adSetError);
+        }
+
+        const { error: adError } = await supabase
+          .from("meta_ads")
+          .upsert(adsForSupabase, {
+            onConflict: "ad_id",
+          });
+
+        if (adError) {
+          console.error("Supabase error (ads):", adError);
         }
 
         result = campaignData;
