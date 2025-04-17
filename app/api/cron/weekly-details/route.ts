@@ -1,14 +1,92 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { FacebookAdsApi, AdAccount } from "facebook-nodejs-business-sdk";
+import {
+  FacebookAdsApi,
+  AdAccount,
+  Campaign,
+} from "facebook-nodejs-business-sdk";
+
+// Types for Meta API responses
+interface MetaApiError {
+  response?: {
+    error?: {
+      code?: number;
+      message?: string;
+    };
+  };
+}
+
+interface MetaPaging {
+  cursors?: {
+    after?: string;
+  };
+}
+
+interface MetaResponse<T> {
+  data?: T[];
+  paging?: MetaPaging;
+}
+
+interface Creative {
+  id: string;
+  name?: string;
+  title?: string;
+  body?: string;
+  object_type?: string;
+  thumbnail_url?: string;
+  image_url?: string;
+  video_id?: string;
+  url_tags?: string;
+  template_url?: string;
+  instagram_permalink_url?: string;
+  effective_object_story_id?: string;
+  asset_feed_spec?: unknown;
+  object_story_spec?: unknown;
+  platform_customizations?: unknown;
+}
+
+interface AdSet {
+  id: string;
+  name: string;
+  status: string;
+  targeting: Record<string, unknown>;
+  billing_event: string;
+  optimization_goal: string;
+  bid_strategy: string;
+  attribution_spec: unknown;
+  promoted_object: unknown;
+  pacing_type: string;
+  getAds: (
+    fields: string[],
+    options?: Record<string, unknown>
+  ) => Promise<MetaResponse<Ad>>;
+}
+
+interface Ad {
+  id: string;
+  name: string;
+  status: string;
+  creative: Creative;
+  tracking_specs: unknown;
+  conversion_specs: unknown;
+  preview_shareable_link: string;
+  effective_object_story_id: string;
+  creative_id: string;
+}
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const BATCH_SIZE = 3;
+const BATCH_SIZE = 5;
 const BATCH_DELAY = 60000;
 const API_CALL_DELAY = 2000;
+const MAX_RETRIES = 3;
 
 // Helper function to delay execution
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Exponential backoff delay
+const getBackoffDelay = (retryCount: number) => {
+  return Math.min(1000 * Math.pow(2, retryCount), 300000); // Max 5 minutes
+};
 
 // Helper function to chunk array into batches
 function chunk<T>(array: T[], size: number): T[][] {
@@ -19,76 +97,141 @@ function chunk<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
-// Helper function to get last week's date range
-function getLastWeekDateRange() {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(start.getDate() - 7);
+// Helper function to handle rate limits with exponential backoff
+async function withRateLimitRetry<T>(
+  operation: () => Promise<T>,
+  context: string
+): Promise<T> {
+  let retries = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error: unknown) {
+      const apiError = error as MetaApiError;
+      const isRateLimit =
+        apiError?.response?.error?.code === 17 ||
+        apiError?.response?.error?.code === 80000 ||
+        apiError?.response?.error?.code === 80003 ||
+        apiError?.response?.error?.code === 80004;
 
-  return {
-    since: start.toISOString().split("T")[0],
-    until: end.toISOString().split("T")[0],
-  };
+      if (!isRateLimit || retries >= MAX_RETRIES) {
+        throw error;
+      }
+
+      const backoffDelay = getBackoffDelay(retries);
+      console.log(
+        `Rate limit hit on ${context}. Retrying in ${backoffDelay}ms...`
+      );
+      await delay(backoffDelay);
+      retries++;
+    }
+  }
 }
 
-interface ErrorLog {
-  type: "account" | "campaign" | "ad_set" | "ad";
-  id: string;
-  error: string;
-}
+// Helper function to get creative details with enhanced fields
+async function getCreativeDetails(creative: Creative, adAccount: AdAccount) {
+  if (!creative || !creative.id) return null;
 
-interface UpdateResults {
-  total_accounts: number;
-  processed_accounts: number;
-  campaigns_updated: number;
-  ad_sets_updated: number;
-  ads_updated: number;
-  errors: ErrorLog[];
-}
-
-// Helper function to get creative thumbnail URL
-async function getCreativeThumbnail(creative: any, adAccount: AdAccount) {
-  try {
-    if (!creative || !creative.id) return null;
-
-    await delay(API_CALL_DELAY);
+  return await withRateLimitRetry(async () => {
     const creativeDetails = await adAccount.getAdCreatives(
       [
+        "id",
+        "name",
+        "title",
+        "body",
+        "object_type",
         "thumbnail_url",
         "image_url",
-        "object_story_spec",
-        "object_type",
         "video_id",
+        "url_tags",
+        "template_url",
+        "instagram_permalink_url",
+        "effective_object_story_id",
+        "asset_feed_spec",
+        "object_story_spec",
+        "platform_customizations",
       ],
       {
-        filtering: [
-          {
-            field: "id",
-            operator: "EQUAL",
-            value: creative.id,
-          },
-        ],
+        filtering: [{ field: "id", operator: "EQUAL", value: creative.id }],
       }
     );
 
     if (!creativeDetails || creativeDetails.length === 0) return null;
 
-    const creativeDetail = creativeDetails[0];
+    const detail = creativeDetails[0];
+    return {
+      thumbnail_url: detail.thumbnail_url || detail.image_url,
+      creative_type: detail.object_type,
+      asset_feed_spec: detail.asset_feed_spec,
+      url_tags: detail.url_tags,
+      template_url: detail.template_url,
+      instagram_permalink_url: detail.instagram_permalink_url,
+      effective_object_story_id: detail.effective_object_story_id,
+      platform_customizations: detail.platform_customizations,
+    };
+  }, `getCreativeDetails-${creative.id}`);
+}
 
-    // Try different possible thumbnail sources
-    return (
-      creativeDetail.thumbnail_url || // Direct thumbnail URL
-      creativeDetail.image_url || // Image URL for image ads
-      (creativeDetail.object_story_spec?.instagram_actor_id &&
-        creativeDetail.object_story_spec?.link_data?.picture) || // Instagram ad image
-      (creativeDetail.object_story_spec?.page_id &&
-        creativeDetail.object_story_spec?.link_data?.picture) || // Facebook ad image
-      null
-    );
-  } catch (error) {
-    console.error("Error fetching creative thumbnail:", error);
-    return null;
+// Helper function to get all items with pagination
+async function getAllItems<T>(
+  fetcher: (after?: string) => Promise<MetaResponse<T>>,
+  context: string
+): Promise<T[]> {
+  let allItems: T[] = [];
+  let hasNextPage = true;
+  let after: string | undefined;
+
+  while (hasNextPage) {
+    try {
+      const response = await withRateLimitRetry(
+        () => fetcher(after),
+        `${context}-page`
+      );
+
+      // Handle Facebook API response format
+      if (Array.isArray(response)) {
+        allItems = allItems.concat(response as T[]);
+
+        // Check if there's a next page in the response
+        const paging = (response as MetaResponse<T>).paging;
+        if (paging?.cursors?.after) {
+          after = paging.cursors.after;
+        } else {
+          hasNextPage = false;
+        }
+      } else if (response?.data) {
+        allItems = allItems.concat(response.data);
+
+        if (response.paging?.cursors?.after) {
+          after = response.paging.cursors.after;
+        } else {
+          hasNextPage = false;
+        }
+      } else {
+        hasNextPage = false;
+      }
+
+      if (hasNextPage) {
+        await delay(API_CALL_DELAY);
+      }
+    } catch (error: unknown) {
+      const apiError = error as MetaApiError;
+      if (
+        apiError?.response?.error?.code === 100 &&
+        apiError?.response?.error?.message?.includes("Invalid cursor")
+      ) {
+        // If we get an invalid cursor error, stop pagination
+        console.warn(
+          `Invalid cursor encountered in ${context}, stopping pagination`
+        );
+        hasNextPage = false;
+      } else {
+        throw error;
+      }
+    }
   }
+
+  return allItems;
 }
 
 export async function GET(request: Request) {
@@ -102,7 +245,6 @@ export async function GET(request: Request) {
     }
 
     const supabase = await createClient();
-    const dateRange = getLastWeekDateRange();
 
     // Get all accounts
     const { data: accounts, error: accountsError } = await supabase
@@ -120,78 +262,46 @@ export async function GET(request: Request) {
       });
     }
 
-    // Get existing data
-    const { data: existingCampaigns } = await supabase
-      .from("meta_campaigns")
-      .select("*")
-      .in(
-        "account_id",
-        accounts.map((a) => a.account_id)
-      );
-
-    const { data: existingAdSets } = await supabase
-      .from("meta_ad_sets")
-      .select("*")
-      .in(
-        "campaign_id",
-        (existingCampaigns || []).map((c) => c.campaign_id)
-      );
-
-    const { data: existingAds } = await supabase
-      .from("meta_ads")
-      .select("*")
-      .in(
-        "ad_set_id",
-        (existingAdSets || []).map((as) => as.ad_set_id)
-      );
-
-    // Start background update for all accounts to check for weekly changes
-    // Initialize Meta API for updates
+    // Initialize Meta API
     const api = FacebookAdsApi.init(process.env.META_ACCESS_TOKEN!);
     api.setDebug(true);
 
     // Process accounts in background
     (async () => {
       const batches = chunk(accounts, BATCH_SIZE);
-      const results: UpdateResults = {
-        total_accounts: accounts.length,
-        processed_accounts: 0,
-        campaigns_updated: 0,
-        ad_sets_updated: 0,
-        ads_updated: 0,
-        errors: [],
-      };
 
       for (const [batchIndex, batch] of batches.entries()) {
         for (const account of batch) {
           try {
-            await delay(API_CALL_DELAY);
             const adAccount = new AdAccount(account.account_id);
 
-            // Fetch campaigns updated in the last week
-            const campaigns = await adAccount.getCampaigns(
-              [
-                "name",
-                "status",
-                "objective",
-                "special_ad_categories",
-                "updated_time", // Include update time
-              ],
-              {
-                limit: 100,
-                filtering: [
-                  {
-                    field: "updated_time",
-                    operator: "GREATER_THAN",
-                    value: dateRange.since,
-                  },
-                ],
-              }
+            // Fetch all campaigns without limit
+            const campaigns = await getAllItems<Campaign>(
+              async (after?: string) => {
+                const options = {
+                  limit: 100,
+                  fields: [
+                    "name",
+                    "status",
+                    "objective",
+                    "special_ad_categories",
+                    "bid_strategy",
+                    "budget_remaining",
+                    "buying_type",
+                    "daily_budget",
+                    "lifetime_budget",
+                  ] as const,
+                  ...(after ? { after } : {}),
+                };
+
+                return adAccount.getCampaigns([], options);
+              },
+              `campaigns-${account.account_id}`
             );
 
             for (const campaign of campaigns) {
-              try {
-                await delay(API_CALL_DELAY);
+              await withRateLimitRetry(async () => {
+                // Store campaign data
                 const campaignData = {
                   campaign_id: campaign.id,
                   account_id: account.account_id,
@@ -199,6 +309,11 @@ export async function GET(request: Request) {
                   status: campaign.status,
                   objective: campaign.objective,
                   special_ad_categories: campaign.special_ad_categories,
+                  bid_strategy: campaign.bid_strategy,
+                  budget_remaining: campaign.budget_remaining,
+                  buying_type: campaign.buying_type,
+                  daily_budget: campaign.daily_budget,
+                  lifetime_budget: campaign.lifetime_budget,
                   last_updated: new Date(),
                 };
 
@@ -206,144 +321,108 @@ export async function GET(request: Request) {
                   .from("meta_campaigns")
                   .upsert([campaignData], { onConflict: "campaign_id" });
 
-                results.campaigns_updated++;
+                // Fetch all ad sets for this campaign
+                const adSets = await getAllItems<AdSet>(
+                  async (after?: string) => {
+                    const options = {
+                      limit: 100,
+                      fields: [
+                        "name",
+                        "status",
+                        "targeting",
+                        "billing_event",
+                        "optimization_goal",
+                        "bid_strategy",
+                        "attribution_spec",
+                        "promoted_object",
+                        "pacing_type",
+                      ] as const,
+                      ...(after ? { after } : {}),
+                    };
 
-                // Fetch ad sets updated in the last week
-                const adSets = await campaign.getAdSets(
-                  [
-                    "name",
-                    "status",
-                    "targeting",
-                    "billing_event",
-                    "optimization_goal",
-                    "bid_strategy",
-                    "updated_time",
-                  ],
-                  {
-                    filtering: [
-                      {
-                        field: "updated_time",
-                        operator: "GREATER_THAN",
-                        value: dateRange.since,
-                      },
-                    ],
-                  }
+                    return campaign.getAdSets([], options);
+                  },
+                  `adsets-${campaign.id}`
                 );
 
                 for (const adSet of adSets) {
-                  try {
-                    await delay(API_CALL_DELAY);
-                    const adSetData = {
-                      ad_set_id: adSet.id,
-                      campaign_id: campaign.id,
-                      name: adSet.name,
-                      status: adSet.status,
-                      targeting: adSet.targeting,
-                      billing_event: adSet.billing_event,
-                      optimization_goal: adSet.optimization_goal,
-                      bid_strategy: adSet.bid_strategy,
-                      last_updated: new Date(),
-                    };
+                  // Store ad set data
+                  const adSetData = {
+                    ad_set_id: adSet.id,
+                    campaign_id: campaign.id,
+                    name: adSet.name,
+                    status: adSet.status,
+                    targeting: adSet.targeting,
+                    billing_event: adSet.billing_event,
+                    optimization_goal: adSet.optimization_goal,
+                    bid_strategy: adSet.bid_strategy,
+                    attribution_spec: adSet.attribution_spec,
+                    promoted_object: adSet.promoted_object,
+                    pacing_type: adSet.pacing_type,
+                    last_updated: new Date(),
+                  };
 
-                    await supabase
-                      .from("meta_ad_sets")
-                      .upsert([adSetData], { onConflict: "ad_set_id" });
+                  await supabase
+                    .from("meta_ad_sets")
+                    .upsert([adSetData], { onConflict: "ad_set_id" });
 
-                    results.ad_sets_updated++;
-
-                    // Fetch ads updated in the last week
-                    const ads = await adSet.getAds(
-                      [
+                  // Fetch all ads for this ad set
+                  const ads = await getAllItems<Ad>(async (after?: string) => {
+                    const options = {
+                      limit: 100,
+                      fields: [
                         "name",
                         "status",
                         "creative",
                         "tracking_specs",
                         "conversion_specs",
                         "preview_shareable_link",
-                        "updated_time",
+                        "effective_object_story_id",
                         "creative_id",
-                      ],
-                      {
-                        filtering: [
-                          {
-                            field: "updated_time",
-                            operator: "GREATER_THAN",
-                            value: dateRange.since,
-                          },
-                        ],
-                      }
+                      ] as const,
+                      ...(after ? { after } : {}),
+                    };
+
+                    return adSet.getAds([], options);
+                  }, `ads-${adSet.id}`);
+
+                  for (const ad of ads) {
+                    // Get enhanced creative details
+                    const creativeDetails = await getCreativeDetails(
+                      ad.creative,
+                      adAccount
                     );
 
-                    for (const ad of ads) {
-                      try {
-                        await delay(API_CALL_DELAY);
+                    // Store ad data
+                    const adData = {
+                      ad_id: ad.id,
+                      ad_set_id: adSet.id,
+                      name: ad.name,
+                      status: ad.status,
+                      creative: ad.creative,
+                      tracking_specs: ad.tracking_specs,
+                      conversion_specs: ad.conversion_specs,
+                      preview_url: ad.preview_shareable_link,
+                      creative_id: ad.creative?.id,
+                      effective_object_story_id: ad.effective_object_story_id,
+                      ...creativeDetails,
+                      last_updated: new Date(),
+                    };
 
-                        // Get thumbnail URL for the ad
-                        const thumbnailUrl = await getCreativeThumbnail(
-                          ad.creative,
-                          adAccount
-                        );
-                        console.log(
-                          { thumbnailUrl },
-                          "this is the thumbnail url"
-                        );
-
-                        const adData = {
-                          ad_id: ad.id,
-                          ad_set_id: adSet.id,
-                          name: ad.name,
-                          status: ad.status,
-                          creative: ad.creative,
-                          tracking_specs: ad.tracking_specs,
-                          conversion_specs: ad.conversion_specs,
-                          preview_url: ad.preview_shareable_link,
-                          thumbnail_url: thumbnailUrl,
-                          last_updated: new Date(),
-                        };
-
-                        await supabase
-                          .from("meta_ads")
-                          .upsert([adData], { onConflict: "ad_id" });
-
-                        results.ads_updated++;
-                      } catch (error) {
-                        results.errors.push({
-                          type: "ad",
-                          id: ad.id,
-                          error:
-                            error instanceof Error
-                              ? error.message
-                              : "Unknown error",
-                        });
-                      }
-                    }
-                  } catch (error) {
-                    results.errors.push({
-                      type: "ad_set",
-                      id: adSet.id,
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : "Unknown error",
-                    });
+                    await supabase
+                      .from("meta_ads")
+                      .upsert([adData], { onConflict: "ad_id" });
                   }
+
+                  await delay(API_CALL_DELAY);
                 }
-              } catch (error) {
-                results.errors.push({
-                  type: "campaign",
-                  id: campaign.id,
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
-                });
-              }
+              }, `campaign-processing-${campaign.id}`);
             }
-            results.processed_accounts++;
           } catch (error) {
-            results.errors.push({
-              type: "account",
-              id: account.account_id,
-              error: error instanceof Error ? error.message : "Unknown error",
-            });
+            console.error(
+              `Error processing account ${account.account_id}:`,
+              error
+            );
           }
         }
 
@@ -352,30 +431,15 @@ export async function GET(request: Request) {
         }
       }
 
-      // Store final results in Supabase for tracking
-      await supabase.from("meta_sync_logs").insert([
-        {
-          type: "weekly_details",
-          date_range: dateRange,
-          results: results,
-          completed_at: new Date(),
-        },
-      ]);
+      console.log("Weekly details update completed");
     })().catch(console.error);
 
-    // Return existing data immediately
     return NextResponse.json({
       success: true,
-      data: {
-        campaigns: existingCampaigns || [],
-        adSets: existingAdSets || [],
-        ads: existingAds || [],
-      },
+      message: "Update process started",
       meta: {
         total_accounts: accounts.length,
-        date_range: dateRange,
         is_updating: true,
-        last_updated: existingCampaigns?.[0]?.last_updated || null,
       },
     });
   } catch (error) {

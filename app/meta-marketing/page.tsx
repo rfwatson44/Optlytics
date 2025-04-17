@@ -200,6 +200,7 @@ export default function MetaMarketingPage() {
       currency: accountData?.result?.currency || "USD",
     }).format(value);
   };
+  console.log({ campaignData });
 
   return (
     <div className="container mx-auto py-8">
