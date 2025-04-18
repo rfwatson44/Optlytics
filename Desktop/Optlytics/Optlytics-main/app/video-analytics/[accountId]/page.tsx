@@ -1,0 +1,49 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import FiltersBar from "../../components/FiltersBar";
+import MetricsBar from "../../components/MetricsBar";
+import AdsTable from "../../components/AdsTable";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default function VideoAnalyticsPage() {
+  const params = useParams();
+  const { accountId } = params;
+  const [accountName, setAccountName] = useState(accountId);
+
+  useEffect(() => {
+    async function fetchAccountName() {
+      const { data } = await supabase
+        .from("accounts")
+        .select("account_name")
+        .eq("account_id", accountId)
+        .single();
+      if (data) setAccountName(data.account_name);
+    }
+    fetchAccountName();
+  }, [accountId]);
+
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <nav className="text-xs text-gray-500 mb-2">
+        <Link href="/">Home</Link>
+        {" > "}
+        <span>{accountName}</span>
+        {" > Video Analytics"}
+      </nav>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Video Analysis</h1>
+        <FiltersBar />
+      </div>
+      <MetricsBar />
+      <AdsTable />
+    </div>
+  );
+}
