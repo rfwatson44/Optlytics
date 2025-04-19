@@ -13,6 +13,12 @@ export function formatNumber(value: number | string): string {
 
 export const ADS_COLUMN_MAP = [
   {
+    label: "Preview",
+    value: "preview",
+    getValue: (row: any) => row.thumbnail_url || null,
+    isPreview: true,
+  },
+  {
     label: "Ad Name",
     value: "ad_name",
     getValue: (row: any) => row.name || "-",

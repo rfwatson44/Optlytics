@@ -14,14 +14,19 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const ALWAYS_ON_COLUMNS = [
+type Metric = { label: string; value: string; getValue?: (row: any) => any; isPreview?: boolean };
+
+const ALWAYS_ON_COLUMNS: Metric[] = [
+  { label: "Preview", value: "preview", getValue: (row: any) => row.thumbnail_url || '', isPreview: true },
   { label: "Ad Name", value: "ad_name" },
-  { label: "Amount Spent", value: "amount_spent" },
 ];
 
-const DEFAULT_METRICS = [
+const DEFAULT_METRICS: Metric[] = [
+  { label: "Amount Spent", value: "amount_spent" },
   { label: "Impressions", value: "impressions" },
+  { label: "Clicks", value: "clicks" },
   { label: "CTR", value: "ctr" },
+  { label: "CPC", value: "cpc" },
 ];
 
 export default function VideoAnalyticsPage() {
@@ -49,7 +54,8 @@ export default function VideoAnalyticsPage() {
     async function fetchAds() {
       const { data, error } = await supabase
         .from("meta_ads")
-        .select("name, spend, impressions, clicks, conversions")
+        .select("name, spend, impressions, clicks, conversions, thumbnail_url, account_id")
+        .eq("account_id", `act_${accountId}`)
         .limit(100);
       if (data) {
         setAds(data);
@@ -66,10 +72,11 @@ export default function VideoAnalyticsPage() {
     fetchAds();
   }, [accountId]);
 
-  const [metrics, setMetrics] = useState(DEFAULT_METRICS);
+  type Metric = { label: string; value: string; getValue?: (row: any) => any; isPreview?: boolean };
+  const [metrics, setMetrics] = useState<Metric[]>(DEFAULT_METRICS);
 
-  // Don't allow always-on columns in metrics
   const METRIC_LABELS = [
+    "Amount Spent",
     "Impressions",
     "Clicks",
     "CTR",
@@ -85,34 +92,26 @@ export default function VideoAnalyticsPage() {
     "Cost Per Lead",
   ];
 
-  // Only show metrics that are not already selected or always-on
-  const allSelectedValues = new Set([
-    ...ALWAYS_ON_COLUMNS.map(col => col.value),
-    ...metrics.map(col => col.value)
-  ]);
-
+  // Only show metrics that are not already selected
+  const allSelectedValues = new Set(metrics.map((col) => col.value));
   const metricOptions = ADS_COLUMN_MAP.filter(
-    col => METRIC_LABELS.includes(col.label) && !allSelectedValues.has(col.value)
+    (col) => METRIC_LABELS.includes(col.label) && !allSelectedValues.has(col.value)
   );
 
   const selectedColumns = useMemo(() => {
-    const alwaysOn = ALWAYS_ON_COLUMNS.map((col) => {
-      const mapCol = ADS_COLUMN_MAP.find((m) => m.value === col.value);
-      // Always return a column with getValue
-      return mapCol ? mapCol : { ...col, getValue: (row: any) => row[col.value] ?? '-' };
-    });
-    // Build columns, injecting a Cost column after each custom conversion metric
-    const renderedColumns: any[] = [];
+    // Always include Preview and Ad Name as the first two columns
+    const renderedColumns: any[] = [...ALWAYS_ON_COLUMNS];
     for (let i = 0; i < metrics.length; ++i) {
       const metric = metrics[i];
-      if (metric.value.startsWith('custom_conversion_')) {
+      if (metric.value.startsWith("custom_conversion_")) {
         // Group count and cost for custom conversions
         renderedColumns.push({
-          type: 'custom_conversion_group',
+          type: "custom_conversion_group",
           label: metric.label,
+          value: metric.value,
           getCount: (row: any) => {
             const val = row.conversions && row.conversions[metric.label];
-            return val != null && !isNaN(val) ? formatNumber(val) : '-';
+            return val != null && !isNaN(val) ? formatNumber(val) : "-";
           },
           getCost: (row: any) => {
             const conversions = row.conversions && row.conversions[metric.label];
@@ -120,19 +119,17 @@ export default function VideoAnalyticsPage() {
             if (conversions && spend && !isNaN(conversions) && conversions !== 0) {
               return formatCurrency(spend / conversions);
             }
-            return '-';
+            return "-";
           },
         });
       } else {
-        renderedColumns.push(
-          ADS_COLUMN_MAP.find((m) => m.value === metric.value) || metric
-        );
+        renderedColumns.push(ADS_COLUMN_MAP.find((m) => m.value === metric.value) || metric);
       }
     }
-    return [...alwaysOn, ...renderedColumns];
+    return renderedColumns;
   }, [metrics]);
 
-  const handleAddMetric = (metric: { label: string; value: string; getValue?: (row: any) => any }) => {
+  const handleAddMetric = (metric: Metric) => {
     setMetrics((prev) => {
       if (prev.some((m) => m.value === metric.value)) {
         return prev;
@@ -155,15 +152,9 @@ export default function VideoAnalyticsPage() {
     });
   };
 
-  // Remove always-on columns from metrics bar
-  const metricsBarMetrics = metrics.filter(
-    m => !ALWAYS_ON_COLUMNS.some(always => always.value === m.value)
-  );
-
   const handleRemoveMetric = (value: string) => {
     setMetrics((prev) => prev.filter((m) => m.value !== value));
   };
-
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -179,13 +170,14 @@ export default function VideoAnalyticsPage() {
       </div>
       
       <MetricsBar
-        metrics={metricsBarMetrics}
+        metrics={metrics}
         onRemoveMetric={handleRemoveMetric}
         onAddMetric={handleAddMetric}
         metricOptions={metricOptions}
         customConversionKeys={customConversionKeys}
+        alwaysOnColumns={ALWAYS_ON_COLUMNS}
       />
-      <AdsTable columns={selectedColumns} />
+      <AdsTable columns={selectedColumns} ads={ads} />
     </div>
   );
 }
