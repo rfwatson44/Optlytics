@@ -69,8 +69,12 @@ export default function Register() {
             <option value="admin">Admin</option>
           </select>
         </label>
-        {role === 'admin' && (
-          <div className="text-sm text-yellow-600 mb-2">Admin accounts require approval before access.</div>
+        {(role === 'user' || role === 'admin') && (
+          <div className="text-sm text-yellow-600 mb-2">
+            {role === 'user'
+              ? 'User accounts require approval before access.'
+              : 'Admin accounts require approval before access.'}
+          </div>
         )}
         {error && <div className="text-red-600">{error}</div>}
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded" disabled={loading}>
@@ -86,6 +90,16 @@ export default function Register() {
           </button>
         </div>
       </form>
+    <div className="mt-4 text-center">
+      <a
+        href="/privacy-policy"
+        className="text-xs text-gray-400 hover:text-green-700 dark:text-gray-500 dark:hover:text-green-300 transition"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Privacy Policy
+      </a>
     </div>
+  </div>
   );
 }

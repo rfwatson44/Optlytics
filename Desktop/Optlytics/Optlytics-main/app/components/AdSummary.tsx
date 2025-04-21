@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { formatCurrency, formatNumber } from "./adsColumnMap";
 
+import type { Ad } from "./AdsTable";
+
 interface AdSummaryProps {
-  ad: any;
+  ad: Ad;
   onClose: () => void;
 }
 

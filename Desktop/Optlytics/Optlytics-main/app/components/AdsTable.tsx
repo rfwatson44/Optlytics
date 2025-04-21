@@ -11,24 +11,50 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Define Ad type based on usage in AdsTable and AdSummary
+export interface Ad {
+  id?: string;
+  name?: string;
+  ad_name?: string;
+  thumbnail_url?: string | null;
+  spend?: number;
+  impressions?: number;
+  clicks?: number;
+  ctr?: number;
+  cpc?: number;
+  reach?: number;
+  revenue?: number;
+  purchases?: number;
+  add_to_cart?: number;
+  app_installs?: number;
+  leads?: number;
+  conversions?: Record<string, number>;
+  landing_page?: string;
+  headline?: string;
+  title?: string;
+  description?: string;
+  call_to_action?: string;
+  [key: string]: unknown;
+}
+
 type StandardColumn = {
   label: string;
   value: string;
-  getValue: (row: any) => any;
+  getValue: (row: Ad) => React.ReactNode;
   isPreview?: boolean;
 };
 type CustomConversionGroup = {
   type: 'custom_conversion_group';
   label: string;
   value: string;
-  getCount: (row: any) => any;
-  getCost: (row: any) => any;
+  getCount: (row: Ad) => React.ReactNode;
+  getCost: (row: Ad) => React.ReactNode;
 };
 type AdsTableColumn = StandardColumn | CustomConversionGroup;
 
 interface AdsTableProps {
   columns?: AdsTableColumn[];
-  ads: any[];
+  ads: Ad[];
 }
 
 
@@ -65,12 +91,12 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
         : []
   );
 
-  const [modalAd, setModalAd] = useState<any | null>(null);
+  const [modalAd, setModalAd] = useState<Ad | null>(null);
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Helper: get raw value for sorting
-  function getSortValue(ad: any, col: any) {
+  function getSortValue(ad: Ad, col: AdsTableColumn) {
     if ('getValue' in col && typeof col.getValue === 'function') {
       const val = col.getValue(ad);
       // Try to parse numbers from formatted strings

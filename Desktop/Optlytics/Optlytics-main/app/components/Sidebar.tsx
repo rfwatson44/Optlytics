@@ -46,6 +46,16 @@ export default function Sidebar() {
           ))}
         </ul>
       </div>
+      <div className="mt-auto pt-8">
+        <a
+          href="/privacy-policy"
+          className="block text-xs text-gray-400 hover:text-green-700 dark:text-gray-500 dark:hover:text-green-300 text-center transition"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Privacy Policy
+        </a>
+      </div>
     </aside>
   );
 }

@@ -154,7 +154,7 @@ async function trackRateLimit(
 
 // Helper function to track API metrics
 async function trackApiMetrics(
-  supabase: any,
+  supabase: SupabaseClient,
   accountId: string,
   endpoint: string,
   callType: string,
@@ -175,7 +175,7 @@ async function trackApiMetrics(
         error_message: errorMessage,
       },
     ]);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error tracking API metrics:", error);
   }
 }
@@ -296,9 +296,9 @@ async function withRateLimitRetry<T>(
 // Helper function to get insights with rate limiting and error handling
 async function getInsights(
   entity: Campaign | AdSet | Ad | AdAccount,
-  supabase: any,
+  supabase: SupabaseClient,
   accountId: string
-): Promise<any> {
+): Promise<Record<string, unknown> | null> {
   return withRateLimitRetry(
     async () => {
       const dateRange = getLast12MonthsDateRange();
@@ -363,7 +363,7 @@ function getLast12MonthsDateRange() {
 
 // Helper function to check if data needs refresh (3 days threshold)
 async function checkDataFreshness(
-  supabase: any,
+  supabase: SupabaseClient,
   accountId: string
 ): Promise<{ needsRefresh: boolean; isNewAccount: boolean }> {
   try {
@@ -395,7 +395,7 @@ async function checkDataFreshness(
       needsRefresh: daysSinceLastUpdate > 3,
       isNewAccount: false,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error checking data freshness:", error);
     // If there's an error checking, assume we need to refresh to be safe
     return { needsRefresh: true, isNewAccount: true };

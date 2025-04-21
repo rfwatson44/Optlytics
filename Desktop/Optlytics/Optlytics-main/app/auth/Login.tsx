@@ -82,6 +82,16 @@ export default function Login() {
           </div>
         </form>
       </div>
+      <div className="mt-4 text-center">
+        <a
+          href="/privacy-policy"
+          className="text-xs text-gray-400 hover:text-green-700 dark:text-gray-500 dark:hover:text-green-300 transition"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Privacy Policy
+        </a>
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import React, { useState } from "react";
 
 
 interface MetricsDropdownProps {
-  onAddMetric: (metric: { label: string; value: string }) => void;
+  onAddMetric: (metric: { label: string; value: string; getValue?: (row: Record<string, unknown>) => unknown }) => void;
   selectedMetrics: { label: string; value: string }[];
   metricOptions: { label: string; value: string }[];
   customConversionKeys?: string[];
@@ -101,11 +101,13 @@ export default function MetricsDropdown({ onAddMetric, selectedMetrics, metricOp
                               onAddMetric({
                                 label: key,
                                 value: `custom_conversion_${key}`,
-                                getValue: (row: any) =>
-                                  row.conversions && row.conversions[key] !== undefined
-                                    ? row.conversions[key]
-                                    : "-",
-                              } as any);
+                                getValue: (row: Record<string, unknown>) => {
+                                  const conversions = row.conversions as Record<string, number> | undefined;
+                                  return conversions && conversions[key] !== undefined
+                                    ? conversions[key]
+                                    : "-";
+                                },
+                              });
                               setOpen(false);
                               setShowCustomConversions(false);
                             }}

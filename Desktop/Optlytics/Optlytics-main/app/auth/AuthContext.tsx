@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { supabase } from './supabaseClient';
 import { Profile } from './types';
 
+import type { User } from '@supabase/supabase-js';
+
 interface AuthContextType {
-  user: any;
+  user: User | null;
   profile: Profile | null;
   loading: boolean;
   signOut: () => void;
@@ -20,7 +22,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
