@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import AdSummary from "./AdSummary";
+import { formatCurrency, formatNumber } from "./adsColumnMap";
 import { createClient } from "@supabase/supabase-js";
 import { ADS_COLUMN_MAP } from "./adsColumnMap";
 
@@ -34,10 +36,10 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
   // Always-on columns: Preview and Ad Name only
   const previewCol = ADS_COLUMN_MAP.find(col => col.value === 'preview');
   const adNameCol = ADS_COLUMN_MAP.find(col => col.value === 'ad_name');
-  const alwaysOnColumns = [previewCol, adNameCol].filter(Boolean);
+  const alwaysOnColumns = [previewCol, adNameCol].filter(Boolean) as StandardColumn[];
 
   // All other columns are controlled by the columns prop
-  const additionalColumns = (columns && columns.length > 0 ? columns : []).filter(col => col.value !== 'preview' && col.value !== 'ad_name');
+  const additionalColumns = (columns && columns.length > 0 ? columns : []).filter(col => col && col.value !== 'preview' && col.value !== 'ad_name');
 
   // Compose final display columns
   const displayColumns = [...alwaysOnColumns, ...additionalColumns];
@@ -45,20 +47,22 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
   // Build groupedColumns for the first header row and flatColumns for the second header row and body
   const groupedColumns = displayColumns;
   const flatColumns = displayColumns.flatMap(col =>
-    'type' in col && col.type === 'custom_conversion_group'
+    col && 'type' in col && col.type === 'custom_conversion_group'
       ? [
           { key: col.label + '-count', render: (row: any) => col.getCount(row) },
           { key: col.label + '-cost', render: (row: any) => col.getCost(row) }
         ]
-      : [
-          { key: col.label, render: (row: any) => (
-            ('isPreview' in col && col.isPreview)
-              ? row.thumbnail_url
-                ? <img src={row.thumbnail_url} alt="Preview" className="w-12 h-12 max-w-[48px] max-h-[48px] object-cover rounded-md border mx-auto" />
-                : <span className="inline-block w-12 h-12 max-w-[48px] max-h-[48px] bg-gray-200 rounded-md flex items-center justify-center text-gray-400 mx-auto">-</span>
-              : ('getValue' in col && col.getValue ? col.getValue(row) : '')
-          ) }
-        ]
+      : col
+        ? [
+            { key: col.label, render: (row: any) => (
+              ('isPreview' in col && col.isPreview)
+                ? row.thumbnail_url
+                  ? <img src={row.thumbnail_url} alt="Preview" className="w-12 h-12 max-w-[48px] max-h-[48px] object-cover rounded-md border mx-auto" />
+                  : <span className="inline-block w-12 h-12 max-w-[48px] max-h-[48px] bg-gray-200 rounded-md flex items-center justify-center text-gray-400 mx-auto">-</span>
+                : ('getValue' in col && col.getValue ? col.getValue(row) : '')
+            ) }
+          ]
+        : []
   );
 
   const [modalAd, setModalAd] = useState<any | null>(null);
@@ -88,7 +92,7 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
   // Sort ads if sortCol is set
   let sortedAds = ads;
   if (sortCol) {
-    const col = displayColumns.find(c => c.value === sortCol);
+    const col = displayColumns.find(c => c && c.value === sortCol);
     if (col) {
       sortedAds = [...ads].sort((a, b) => {
         const aVal = getSortValue(a, col);
@@ -219,6 +223,7 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
                 </td>
                 {/* Render ad_name column */}
                 {displayColumns.map((col) => {
+                  if (!col) return null;
                   if (col.value === 'ad_name') {
                     return (
                       <td key={col.value} className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100" style={{ minWidth: '160px', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -230,6 +235,7 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
                 })}
                 {/* Render metric columns, highlight sorted column */}
                 {displayColumns.map((col) => {
+                  if (!col) return null;
                   if (col.value === 'preview' || col.value === 'ad_name' || ('type' in col && col.type === 'custom_conversion_group')) return null;
                   const highlight = sortCol === col.value ? 'bg-green-50 dark:bg-green-950' : '';
                   return (
@@ -240,6 +246,7 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
                 })}
                 {/* Render custom conversion columns (Count/Cost) */}
                 {displayColumns.map((col) => {
+                  if (!col) return null;
                   if ('type' in col && col.type === 'custom_conversion_group') {
                     return [
                       <td key={col.value + '-count'} className="px-4 py-3 text-center">
@@ -259,21 +266,7 @@ export default function AdsTable({ columns, ads }: AdsTableProps) {
       </div>
     </div>
     {modalAd && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 max-w-lg w-full relative">
-          <button
-            className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-            onClick={() => setModalAd(null)}
-            title="Close"
-          >
-            ✕
-          </button>
-          <h2 className="text-lg font-bold mb-2">Ad Details</h2>
-          <pre className="text-xs bg-gray-100 dark:bg-gray-800 rounded p-2 overflow-x-auto max-h-96">
-            {JSON.stringify(modalAd, null, 2)}
-          </pre>
-        </div>
-      </div>
+      <AdSummary ad={modalAd} onClose={() => setModalAd(null)} />
     )}
     </>
   );

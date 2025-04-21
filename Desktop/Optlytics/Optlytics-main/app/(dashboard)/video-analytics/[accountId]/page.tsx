@@ -4,10 +4,11 @@ import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import FiltersBar from "../../components/FiltersBar";
-import MetricsBar from "../../components/MetricsBar";
-import AdsTable from "../../components/AdsTable";
-import { ADS_COLUMN_MAP, formatCurrency, formatNumber } from "../../components/adsColumnMap";
+import FiltersBar from "../../../components/FiltersBar";
+import MetricsBar from "../../../components/MetricsBar";
+import AdsTable from "../../../components/AdsTable";
+import { ADS_COLUMN_MAP, formatCurrency, formatNumber } from "../../../components/adsColumnMap";
+import { useHeader } from "../../../components/HeaderContext";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,6 +38,8 @@ export default function VideoAnalyticsPage() {
   const { accountId } = params;
   const [accountName, setAccountName] = useState(accountId);
 
+  const { setHeader } = useHeader();
+
   useEffect(() => {
     async function fetchAccountName() {
       const { data } = await supabase
@@ -48,6 +51,15 @@ export default function VideoAnalyticsPage() {
     }
     fetchAccountName();
   }, [accountId]);
+
+  useEffect(() => {
+    setHeader(
+      <>
+        <Link href="/">Home</Link> {'>'} <span>{accountName}</span> {'>'} <span>Video Analytics</span>
+      </>,
+      "Video Analysis"
+    );
+  }, [accountName, setHeader]);
 
   // Fetch ads including conversions for custom conversion keys
   useEffect(() => {
@@ -72,7 +84,6 @@ export default function VideoAnalyticsPage() {
     fetchAds();
   }, [accountId]);
 
-  type Metric = { label: string; value: string; getValue?: (row: any) => any; isPreview?: boolean };
   const [metrics, setMetrics] = useState<Metric[]>(DEFAULT_METRICS);
 
   const METRIC_LABELS = [
@@ -158,16 +169,8 @@ export default function VideoAnalyticsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
-      <nav className="text-xs text-gray-500 mb-2">
-        <Link href="/">Home</Link>
-        {" > "}
-        <span>{accountName}</span>
-        {" > Video Analytics"}
-      </nav>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Video Analysis</h1>
-        <FiltersBar />
-      </div>
+
+      <FiltersBar />
       
       <MetricsBar
         metrics={metrics}
