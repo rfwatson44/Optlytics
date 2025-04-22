@@ -28,7 +28,7 @@ export interface Ad {
   add_to_cart?: number;
   app_installs?: number;
   leads?: number;
-  conversions?: Record<string, number>;
+  conversions: Record<string, number> | null;
   landing_page?: string;
   headline?: string;
   title?: string;

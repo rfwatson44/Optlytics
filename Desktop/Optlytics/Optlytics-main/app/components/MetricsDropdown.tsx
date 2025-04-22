@@ -92,30 +92,52 @@ export default function MetricsDropdown({ onAddMetric, selectedMetrics, metricOp
                       <div className="text-xs text-gray-400 px-4 py-2">No custom conversions found for this account.</div>
                     ) : (
                       (customConversionKeys ?? []).map((key: string) => {
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-950 rounded text-sm cursor-pointer"
-                            onClick={() => {
-                              onAddMetric({
-                                label: key,
-                                value: `custom_conversion_${key}`,
-                                getValue: (row: Record<string, unknown>) => {
-                                  const conversions = row.conversions as Record<string, number> | undefined;
-                                  return conversions && conversions[key] !== undefined
-                                    ? conversions[key]
-                                    : "-";
-                                },
-                              });
-                              setOpen(false);
-                              setShowCustomConversions(false);
-                            }}
-                          >
-                            {key}
-                          </button>
-                        );
-                      })
+  // Example values: Try to show from the first ad if available
+  let exampleConversion = '-';
+  let exampleCost = '-';
+  if (typeof window !== 'undefined') {
+    // Try to get the first ad from the table if available
+    const adsTable = document.querySelector('[data-ads-table]');
+    if (adsTable) {
+      // Try to get data from a global variable, or this can be improved by passing ads as prop
+      const ads = (window as any).OPTLYTICS_ADS || [];
+      if (ads.length > 0) {
+        const ad = ads[0];
+        if (ad.conversions && ad.conversions[key] !== undefined) {
+          exampleConversion = require('./adsColumnMap').formatNumber(ad.conversions[key]);
+          if (ad.spend && ad.conversions[key] > 0) {
+            exampleCost = require('./adsColumnMap').formatCurrency(ad.spend / ad.conversions[key]);
+          }
+        }
+      }
+    }
+  }
+  return (
+    <button
+      key={key}
+      type="button"
+      className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-950 rounded text-sm cursor-pointer flex items-center justify-between"
+      onClick={() => {
+        onAddMetric({
+  label: key,
+  value: `custom_conversion_${key}`,
+  getValue: (row: Record<string, unknown>) => {
+    const conversions = row.conversions as Record<string, number> | undefined;
+    return conversions && conversions[key] !== undefined
+      ? require('./adsColumnMap').formatNumber(conversions[key])
+      : "-";
+  },
+});
+        setOpen(false);
+        setShowCustomConversions(false);
+      }}
+    >
+      <span className="flex-1">{key}</span>
+      <span className="w-16 text-right font-mono text-xs text-gray-700 dark:text-gray-200">{exampleConversion}</span>
+      <span className="w-20 text-right font-mono text-xs text-gray-700 dark:text-gray-400 pl-2">{exampleCost}</span>
+    </button>
+  );
+})
                     )}
                   </div>
                 )}

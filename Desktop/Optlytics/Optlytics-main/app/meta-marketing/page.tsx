@@ -402,7 +402,7 @@ export default function MetaMarketingPage() {
                         </div>
                         <div>
                           <h4 className="font-semibold">Impressions</h4>
-                          <p>{adSetData.adSet.impressions?.toLocaleString()}</p>
+                          <p>{adSetData.adSet.impressions != null ? adSetData.adSet.impressions.toLocaleString() : '-'}</p>
                         </div>
                         <div>
                           <h4 className="font-semibold">Clicks</h4>
@@ -410,7 +410,7 @@ export default function MetaMarketingPage() {
                         </div>
                         <div>
                           <h4 className="font-semibold">Spend</h4>
-                          <p>{formatCurrency(adSetData.adSet.spend)}</p>
+                          <p>{formatCurrency(adSetData.adSet.spend ?? 0)}</p>
                         </div>
                       </div>
 
@@ -419,36 +419,36 @@ export default function MetaMarketingPage() {
                         <h4 className="font-semibold text-lg">Ads</h4>
                         {adSetData.ads.map((ad) => (
                           <div
-                            key={ad.ad_id}
+                            key={ad.ad.ad_id}
                             className="bg-gray-50 p-4 rounded-lg"
                           >
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               <div>
                                 <h5 className="font-semibold">Ad Name</h5>
-                                <p>{ad.name}</p>
+                                <p>{ad.ad.name ?? '-'}</p>
                               </div>
                               <div>
                                 <h5 className="font-semibold">Status</h5>
                                 <p className="capitalize">
-                                  {ad.status.toLowerCase()}
+                                  {ad.ad.status ? ad.ad.status.toLowerCase() : '-'}
                                 </p>
                               </div>
                               <div>
                                 <h5 className="font-semibold">Impressions</h5>
-                                <p>{ad.impressions?.toLocaleString()}</p>
+                                <p>{ad.ad.impressions != null ? ad.ad.impressions.toLocaleString() : '-'}</p>
                               </div>
                               <div>
                                 <h5 className="font-semibold">Clicks</h5>
-                                <p>{ad.clicks?.toLocaleString()}</p>
+                                <p>{ad.ad.clicks != null ? ad.ad.clicks.toLocaleString() : '-'}</p>
                               </div>
                               <div>
                                 <h5 className="font-semibold">Spend</h5>
-                                <p>{formatCurrency(ad.spend)}</p>
+                                <p>{formatCurrency(ad.ad.spend ?? 0)}</p>
                               </div>
                               <div>
                                 <h5 className="font-semibold">Last Updated</h5>
                                 <p>
-                                  {new Date(ad.last_updated).toLocaleString()}
+                                  {ad.ad.last_updated ? new Date(ad.ad.last_updated).toLocaleString() : '-'}
                                 </p>
                               </div>
                             </div>

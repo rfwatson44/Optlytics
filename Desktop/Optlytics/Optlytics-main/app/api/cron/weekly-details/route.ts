@@ -6,6 +6,19 @@ import {
   Campaign,
 } from "facebook-nodejs-business-sdk";
 
+type MetaCampaign = {
+  id: string;
+  name: string;
+  status: string;
+  objective: string;
+  special_ad_categories?: string[];
+  bid_strategy?: string;
+  budget_remaining?: number;
+  buying_type?: string;
+  daily_budget?: number;
+  lifetime_budget?: number;
+};
+
 // Types for Meta API responses
 interface MetaApiError {
   response?: {
@@ -238,7 +251,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get("secret");
-    const forceUpdate = searchParams.get("force") === "true";
 
     if (secret !== CRON_SECRET && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -276,7 +288,7 @@ export async function GET(request: Request) {
             const adAccount = new AdAccount(account.account_id);
 
             // Fetch all campaigns without limit
-            const campaigns = await getAllItems<Campaign>(
+            const campaigns = await getAllItems<MetaCampaign>(
               async (after?: string) => {
                 const options = {
                   limit: 100,
@@ -299,7 +311,7 @@ export async function GET(request: Request) {
               `campaigns-${account.account_id}`
             );
 
-            for (const campaign of campaigns) {
+            for (const campaign of campaigns as MetaCampaign[]) {
               await withRateLimitRetry(async () => {
                 // Store campaign data
                 const campaignData = {
@@ -340,7 +352,8 @@ export async function GET(request: Request) {
                       ...(after ? { after } : {}),
                     };
 
-                    return campaign.getAdSets([], options);
+                    const campaignInstance = new Campaign(campaign.id);
+                    return campaignInstance.getAdSets([], options);
                   },
                   `adsets-${campaign.id}`
                 );

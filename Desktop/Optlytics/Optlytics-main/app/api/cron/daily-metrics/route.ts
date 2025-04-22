@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     }
 
     // Get existing metrics for yesterday
-    const { data: existingMetrics, error: metricsError } = await supabase
+    const { data: existingMetrics } = await supabase
       .from("meta_daily_metrics")
       .select("*")
       .eq("date", dateRange.since)

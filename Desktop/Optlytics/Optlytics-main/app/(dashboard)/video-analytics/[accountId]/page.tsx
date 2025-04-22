@@ -15,23 +15,40 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type Metric = { label: string; value: string; getValue?: (row: any) => any; isPreview?: boolean };
+import type { Ad } from '../../../components/AdsTable';
+
+type Metric = {
+  label: string;
+  value: string;
+  getValue: (row: Ad) => React.ReactNode;
+  isPreview?: boolean;
+};
+
+
 
 const ALWAYS_ON_COLUMNS: Metric[] = [
   { label: "Preview", value: "preview", getValue: (row: any) => row.thumbnail_url || '', isPreview: true },
-  { label: "Ad Name", value: "ad_name" },
+  { label: "Ad Name", value: "ad_name", getValue: (row: Ad) => row.name },
 ];
 
 const DEFAULT_METRICS: Metric[] = [
-  { label: "Amount Spent", value: "amount_spent" },
-  { label: "Impressions", value: "impressions" },
-  { label: "Clicks", value: "clicks" },
-  { label: "CTR", value: "ctr" },
-  { label: "CPC", value: "cpc" },
+  { label: "Amount Spent", value: "amount_spent", getValue: (row: Ad) => formatCurrency(row.spend ?? 0) },
+  { label: "Impressions", value: "impressions", getValue: (row: Ad) => formatNumber(row.impressions ?? 0) },
+  { label: "Clicks", value: "clicks", getValue: (row: Ad) => formatNumber(row.clicks ?? 0) },
+  { label: "CTR", value: "ctr", getValue: (row: Ad) => {
+    const clicks = row.clicks ?? 0;
+    const impressions = row.impressions ?? 0;
+    return impressions > 0 ? `${((clicks / impressions) * 100).toFixed(2)}%` : '-';
+  } },
+  { label: "CPC", value: "cpc", getValue: (row: Ad) => {
+    const spend = row.spend ?? 0;
+    const clicks = row.clicks ?? 0;
+    return clicks > 0 ? formatCurrency(spend / clicks) : '-';
+  } },
 ];
 
 export default function VideoAnalyticsPage() {
-  const [ads, setAds] = useState<any[]>([]);
+  const [ads, setAds] = useState<Ad[]>([]);
   const [customConversionKeys, setCustomConversionKeys] = useState<string[]>([]);
 
   const params = useParams();
@@ -73,7 +90,7 @@ export default function VideoAnalyticsPage() {
         setAds(data);
         // Extract all unique custom conversion keys
         const keys = new Set<string>();
-        data.forEach((row: any) => {
+        data.forEach((row: Ad) => {
           if (row.conversions && typeof row.conversions === "object") {
             Object.keys(row.conversions).forEach((k) => keys.add(k));
           }
@@ -106,60 +123,60 @@ export default function VideoAnalyticsPage() {
   // Only show metrics that are not already selected
   const allSelectedValues = new Set(metrics.map((col) => col.value));
   const metricOptions = ADS_COLUMN_MAP.filter(
-    (col) => METRIC_LABELS.includes(col.label) && !allSelectedValues.has(col.value)
+    (col) => METRIC_LABELS.includes(col.label) && !allSelectedValues.has(col.value) && col.getValue !== undefined
   );
 
   const selectedColumns = useMemo(() => {
     // Always include Preview and Ad Name as the first two columns
-    const renderedColumns: any[] = [...ALWAYS_ON_COLUMNS];
+    const renderedColumns: Metric[] = [...ALWAYS_ON_COLUMNS];
     for (let i = 0; i < metrics.length; ++i) {
       const metric = metrics[i];
       if (metric.value.startsWith("custom_conversion_")) {
         // Group count and cost for custom conversions
         renderedColumns.push({
-          type: "custom_conversion_group",
           label: metric.label,
           value: metric.value,
-          getCount: (row: any) => {
+          getValue: (row: Ad) => {
             const val = row.conversions && row.conversions[metric.label];
-            return val != null && !isNaN(val) ? formatNumber(val) : "-";
-          },
-          getCost: (row: any) => {
-            const conversions = row.conversions && row.conversions[metric.label];
-            const spend = row.spend;
-            if (conversions && spend && !isNaN(conversions) && conversions !== 0) {
-              return formatCurrency(spend / conversions);
-            }
-            return "-";
+            return typeof val === 'number' && !isNaN(val) ? formatNumber(val) : '-';
           },
         });
       } else {
-        renderedColumns.push(ADS_COLUMN_MAP.find((m) => m.value === metric.value) || metric);
+        const column = ADS_COLUMN_MAP.find((m) => m.value === metric.value);
+        if (column && column.getValue !== undefined) {
+          renderedColumns.push(column);
+        }
       }
     }
     return renderedColumns;
   }, [metrics]);
 
-  const handleAddMetric = (metric: Metric) => {
+  const handleAddMetric = (metric: { label: string; value: string }) => {
     setMetrics((prev) => {
       if (prev.some((m) => m.value === metric.value)) {
         return prev;
       }
-      // If it's a custom conversion, add getValue
+      // If it's a custom conversion, add as simple metric
       if (metric.value.startsWith('custom_conversion_')) {
         const key = metric.label;
         return [
           ...prev,
           {
             ...metric,
-            getValue: (row: any) =>
+            getValue: (row: Ad) =>
               row.conversions && row.conversions[key] !== undefined
-                ? row.conversions[key]
+                ? formatNumber(row.conversions[key])
                 : '-',
           },
         ];
       }
-      return [...prev, metric];
+      // Standard metric: get from DEFAULT_METRICS or fallback
+      const found = DEFAULT_METRICS.find(m => m.value === metric.value);
+      if (found) {
+        return [...prev, found];
+      }
+      // Fallback: treat as string
+      return [...prev, { ...metric, getValue: () => '-' }];
     });
   };
 
@@ -178,7 +195,6 @@ export default function VideoAnalyticsPage() {
         onAddMetric={handleAddMetric}
         metricOptions={metricOptions}
         customConversionKeys={customConversionKeys}
-        alwaysOnColumns={ALWAYS_ON_COLUMNS}
       />
       <AdsTable columns={selectedColumns} ads={ads} />
     </div>

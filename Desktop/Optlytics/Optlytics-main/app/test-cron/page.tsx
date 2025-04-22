@@ -5,9 +5,9 @@ import { useMutation } from "@tanstack/react-query";
 
 export default function TestCronPage() {
   const [selectedJob, setSelectedJob] = useState("daily-metrics");
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState<string | null>(null);
 
-  const { mutate: runCronJob, isLoading } = useMutation({
+  const { mutate: runCronJob, status } = useMutation({
     mutationFn: async () => {
       const response = await fetch(
         `/api/cron/${selectedJob}?secret=${process.env.NEXT_PUBLIC_CRON_SECRET}`
@@ -22,9 +22,7 @@ export default function TestCronPage() {
     },
     onError: (error) => {
       console.error("Error running cron job:", error);
-      setResults({
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      setResults(error instanceof Error ? error.message : "Unknown error");
     },
   });
 
@@ -44,10 +42,10 @@ export default function TestCronPage() {
 
         <button
           onClick={() => runCronJob()}
-          disabled={isLoading}
-          className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-400"
+          className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+          disabled={status === 'pending'}
         >
-          {isLoading ? "Running..." : "Run Job"}
+          {status === 'pending' ? "Running..." : "Run"}
         </button>
       </div>
 
