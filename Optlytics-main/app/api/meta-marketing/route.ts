@@ -8,7 +8,6 @@ import { createClient } from "@/utils/supabase/server";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 // Import these types for type checking but not for actual usage
-import type { Campaign, AdSet, Ad } from "facebook-nodejs-business-sdk";
 
 // Helper functions to safely parse strings to numbers
 function safeParseInt(value: string | undefined, defaultValue = 0): number {
@@ -1180,17 +1179,6 @@ export async function POST(request: Request) {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
     const data = await request.json();
-
-    // Initialize Meta API
-    try {
-      await initializeApi(META_CONFIG.accessToken);
-    } catch (error) {
-      console.error("Failed to initialize Meta API:", error);
-      return NextResponse.json(
-        { error: "Failed to initialize Meta API" },
-        { status: 500 }
-      );
-    }
 
     const account = new AdAccount(data.accountId);
     const supabase = await createClient();
