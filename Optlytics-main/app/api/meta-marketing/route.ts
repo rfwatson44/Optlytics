@@ -140,7 +140,7 @@ async function trackRateLimit(
     ]);
 
     // If we're approaching limits, add artificial delay
-    if (rateLimitInfo.usage_percent > 80) {
+    if (rateLimitInfo.usage_percent && rateLimitInfo.usage_percent > 80) {
       const delayTime = calculateDynamicDelay(
         endpoint,
         rateLimitInfo.call_count || 0
@@ -154,7 +154,7 @@ async function trackRateLimit(
 
 // Helper function to track API metrics
 async function trackApiMetrics(
-  supabase: any,
+  supabase: SupabaseClient,
   accountId: string,
   endpoint: string,
   callType: string,
