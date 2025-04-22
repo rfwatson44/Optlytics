@@ -295,8 +295,8 @@ async function withRateLimitRetry<T>(
 
 // Helper function to get insights with rate limiting and error handling
 async function getInsights(
-  entity: Campaign | AdSet | Ad | AdAccount,
-  supabase: any,
+  entity: Campaign | AdSet | Ad | AdAccount | Record<string, any>,
+  supabase: SupabaseClient,
   accountId: string
 ): Promise<any> {
   return withRateLimitRetry(
