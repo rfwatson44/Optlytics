@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  useMutation,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import Link from "next/link";
 
 export default function TestCronPage() {
   const [queryClient] = useState(() => new QueryClient());
@@ -39,16 +44,27 @@ export default function TestCronPage() {
             className="border p-2 rounded mr-4"
           >
             <option value="daily-metrics">Daily Metrics Sync</option>
+            <option value="weekly-details">Weekly Details Sync</option>
+            <option value="marketing-ping">Marketing API Ping</option>
             {/* Add other jobs here as we implement them */}
           </select>
 
           <button
             onClick={() => runCronJob()}
             className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
-            disabled={status === 'pending'}
+            disabled={status === "pending"}
           >
-            {status === 'pending' ? "Running..." : "Run"}
+            {status === "pending" ? "Running..." : "Run"}
           </button>
+        </div>
+
+        <div className="mb-6">
+          <Link
+            href="/test-marketing-ping"
+            className="text-blue-600 hover:underline"
+          >
+            Go to detailed Marketing API Ping Test page →
+          </Link>
         </div>
 
         {results && (
