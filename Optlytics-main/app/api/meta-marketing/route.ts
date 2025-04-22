@@ -2,13 +2,57 @@ import { NextResponse } from "next/server";
 import {
   FacebookAdsApi,
   AdAccount,
-  Campaign,
-  AdSet,
-  Ad,
   AdCreative,
 } from "facebook-nodejs-business-sdk";
 import { createClient } from "@/utils/supabase/server";
 import { SupabaseClient } from "@supabase/supabase-js";
+
+// Import these types for type checking but not for actual usage
+import type { Campaign, AdSet, Ad } from "facebook-nodejs-business-sdk";
+
+// Helper functions to safely parse strings to numbers
+function safeParseInt(value: string | undefined, defaultValue = 0): number {
+  if (value === undefined) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+function safeParseFloat(value: string | undefined, defaultValue = 0): number {
+  if (value === undefined) return defaultValue;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+// Interface for entities that support the getInsights method
+interface InsightCapableEntity {
+  id: string;
+  getInsights: (
+    fields: string[],
+    options: Record<string, unknown>
+  ) => Promise<unknown[]>;
+}
+
+// Interface for processed insights results
+interface InsightResult {
+  impressions?: string;
+  clicks?: string;
+  reach?: string;
+  spend?: string;
+  cpc?: string;
+  cpm?: string;
+  ctr?: string;
+  frequency?: string;
+  objective?: string;
+  action_values?: Array<{ action_type: string; value: string }>;
+  actions?: Array<{ action_type: string; value: string }>;
+  cost_per_action_type?: Array<{ action_type: string; value: string }>;
+  cost_per_unique_click?: string;
+  outbound_clicks?: Array<{ action_type: string; value: string }>;
+  outbound_clicks_ctr?: Array<{ action_type: string; value: string }>;
+  website_ctr?: Array<{ action_type: string; value: string }>;
+  website_purchase_roas?: Array<{ action_type: string; value: string }>;
+  [key: string]: unknown;
+}
 
 interface RateLimitInfo {
   usage_percent: number;
@@ -295,10 +339,10 @@ async function withRateLimitRetry<T>(
 
 // Helper function to get insights with rate limiting and error handling
 async function getInsights(
-  entity: Campaign | AdSet | Ad | AdAccount | Record<string, any>,
+  entity: InsightCapableEntity,
   supabase: SupabaseClient,
   accountId: string
-): Promise<any> {
+): Promise<InsightResult | null> {
   return withRateLimitRetry(
     async () => {
       const dateRange = getLast12MonthsDateRange();
@@ -336,7 +380,7 @@ async function getInsights(
         }
       );
 
-      const processedInsights = insights?.[0] || null;
+      const processedInsights = (insights?.[0] as InsightResult) || null;
 
       return processedInsights;
     },
@@ -557,9 +601,9 @@ export async function GET(request: Request) {
           tax_id_status: accountInfo.tax_id_status,
           insights_start_date: new Date(dateRange.since),
           insights_end_date: new Date(dateRange.until),
-          total_impressions: parseInt(insights?.[0]?.impressions ?? "0"),
-          total_clicks: parseInt(insights?.[0]?.clicks ?? "0"),
-          total_reach: parseInt(insights?.[0]?.reach ?? "0"),
+          total_impressions: safeParseInt(insights?.[0]?.impressions ?? "0"),
+          total_clicks: safeParseInt(insights?.[0]?.clicks ?? "0"),
+          total_reach: safeParseInt(insights?.[0]?.reach ?? "0"),
           total_spend: parseFloat(insights?.[0]?.spend ?? "0"),
           average_cpc: parseFloat(insights?.[0]?.cpc ?? "0"),
           average_cpm: parseFloat(insights?.[0]?.cpm ?? "0"),
@@ -654,7 +698,11 @@ export async function GET(request: Request) {
             console.log("Processing campaign:", campaign.id);
 
             // Get campaign insights with all new metrics
-            const insights = await getInsights(campaign, supabase, accountId);
+            const insights = await getInsights(
+              campaign as InsightCapableEntity,
+              supabase,
+              accountId
+            );
 
             // Store enhanced campaign data with all new columns aligned with Supabase schema
             const campaignData = {
@@ -682,10 +730,10 @@ export async function GET(request: Request) {
                 : null,
               end_time: campaign.end_time ? new Date(campaign.end_time) : null,
               // Metrics from insights
-              impressions: parseInt(insights?.impressions ?? "0"),
-              clicks: parseInt(insights?.clicks ?? "0"),
-              reach: parseInt(insights?.reach ?? "0"),
-              spend: parseFloat(insights?.spend ?? "0"),
+              impressions: safeParseInt(insights?.impressions),
+              clicks: safeParseInt(insights?.clicks),
+              reach: safeParseInt(insights?.reach),
+              spend: safeParseFloat(insights?.spend),
               // Convert actions array to conversions object for our schema
               conversions: insights?.actions
                 ? insights.actions.reduce((acc: any, action: any) => {
@@ -696,10 +744,10 @@ export async function GET(request: Request) {
               // Calculate cost per conversion if we have conversions
               cost_per_conversion:
                 insights?.actions && insights.actions.length > 0
-                  ? parseFloat(insights.spend) /
+                  ? safeParseFloat(insights.spend) /
                     insights.actions.reduce(
                       (sum: number, action: any) =>
-                        sum + parseInt(action.value),
+                        sum + safeParseInt(action.value),
                       0
                     )
                   : null,
@@ -770,7 +818,7 @@ export async function GET(request: Request) {
 
             for (const adSet of adSets) {
               const adSetInsights = await getInsights(
-                adSet,
+                adSet as InsightCapableEntity,
                 supabase,
                 accountId
               );
@@ -808,10 +856,10 @@ export async function GET(request: Request) {
                   : null,
                 end_time: adSet.end_time ? new Date(adSet.end_time) : null,
                 // Metrics from insights
-                impressions: parseInt(adSetInsights?.impressions ?? "0"),
-                clicks: parseInt(adSetInsights?.clicks ?? "0"),
-                reach: parseInt(adSetInsights?.reach ?? "0"),
-                spend: parseFloat(adSetInsights?.spend ?? "0"),
+                impressions: safeParseInt(adSetInsights?.impressions),
+                clicks: safeParseInt(adSetInsights?.clicks),
+                reach: safeParseInt(adSetInsights?.reach),
+                spend: safeParseFloat(adSetInsights?.spend),
                 // Convert actions array to conversions object for our schema
                 conversions: adSetInsights?.actions
                   ? adSetInsights.actions.reduce((acc: any, action: any) => {
@@ -822,10 +870,10 @@ export async function GET(request: Request) {
                 // Calculate cost per conversion if we have conversions
                 cost_per_conversion:
                   adSetInsights?.actions && adSetInsights.actions.length > 0
-                    ? parseFloat(adSetInsights.spend) /
+                    ? safeParseFloat(adSetInsights.spend) /
                       adSetInsights.actions.reduce(
                         (sum: number, action: any) =>
-                          sum + parseInt(action.value),
+                          sum + safeParseInt(action.value),
                         0
                       )
                     : null,
@@ -888,7 +936,11 @@ export async function GET(request: Request) {
 
               for (const ad of ads) {
                 try {
-                  await getInsights(ad, supabase, accountId);
+                  await getInsights(
+                    ad as InsightCapableEntity,
+                    supabase,
+                    accountId
+                  );
 
                   // Get creative details if creative exists
                   let creativeDetails = null;
@@ -970,7 +1022,11 @@ export async function GET(request: Request) {
                     let adInsights = null;
                     try {
                       adInsights = await Promise.race([
-                        getInsights(ad, supabase, accountId),
+                        getInsights(
+                          ad as InsightCapableEntity,
+                          supabase,
+                          accountId
+                        ),
                         new Promise((_, reject) =>
                           setTimeout(
                             () => reject(new Error("Insights timeout")),
@@ -987,63 +1043,66 @@ export async function GET(request: Request) {
                     }
 
                     // Add insights data if available
-                    const adRecordWithInsights = {
-                      ...adRecord,
-                      // Metrics from insights
-                      impressions: parseInt(adInsights?.impressions ?? "0"),
-                      clicks: parseInt(adInsights?.clicks ?? "0"),
-                      reach: parseInt(adInsights?.reach ?? "0"),
-                      spend: parseFloat(adInsights?.spend ?? "0"),
-                      // Convert actions array to conversions object
-                      conversions: adInsights?.actions
-                        ? adInsights.actions.reduce(
-                            (
-                              acc: Record<string, string>,
-                              action: { action_type: string; value: string }
-                            ) => {
-                              acc[action.action_type] = action.value;
-                              return acc;
-                            },
-                            {}
-                          )
-                        : null,
-                      // Calculate cost per conversion
-                      cost_per_conversion:
-                        adInsights?.actions && adInsights.actions.length > 0
-                          ? parseFloat(adInsights.spend) /
-                            adInsights.actions.reduce(
-                              (sum: number, action: { value: string }) =>
-                                sum + parseInt(action.value),
-                              0
+                    if (adInsights) {
+                      const insightsData = adInsights as InsightResult;
+                      const adWithInsights = {
+                        ...adRecord,
+                        // Metrics from insights
+                        impressions: safeParseInt(insightsData.impressions),
+                        clicks: safeParseInt(insightsData.clicks),
+                        reach: safeParseInt(insightsData.reach),
+                        spend: safeParseFloat(insightsData.spend),
+                        // Convert actions array to conversions object
+                        conversions: insightsData.actions
+                          ? insightsData.actions.reduce(
+                              (
+                                acc: Record<string, string>,
+                                action: { action_type: string; value: string }
+                              ) => {
+                                acc[action.action_type] = action.value;
+                                return acc;
+                              },
+                              {}
                             )
                           : null,
-                      last_updated: new Date(),
-                      created_at: new Date(),
-                      updated_at: new Date(),
-                    };
+                        // Calculate cost per conversion if we have conversions
+                        cost_per_conversion:
+                          insightsData.actions &&
+                          insightsData.actions.length > 0
+                            ? safeParseFloat(insightsData.spend) /
+                              insightsData.actions.reduce(
+                                (sum: number, action: { value: string }) =>
+                                  sum + safeParseInt(action.value),
+                                0
+                              )
+                            : null,
+                      };
 
-                    // Upsert with proper constraint
-                    const { error: adError } = await supabase
-                      .from("meta_ads")
-                      .upsert(adRecordWithInsights, {
-                        onConflict: "ad_id",
-                        ignoreDuplicates: false,
-                      })
-                      .match({
-                        ad_id: ad.id,
-                        ad_set_id: adSet.id,
-                        campaign_id: campaign.id,
-                        account_id: accountId,
-                      });
+                      // Upsert with proper constraint
+                      const { error: adError } = await supabase
+                        .from("meta_ads")
+                        .upsert(adWithInsights, {
+                          onConflict: "ad_id",
+                          ignoreDuplicates: false,
+                        })
+                        .match({
+                          ad_id: ad.id,
+                          ad_set_id: adSet.id,
+                          campaign_id: campaign.id,
+                          account_id: accountId,
+                        });
 
-                    if (adError) {
-                      console.error("Error storing ad:", adError);
-                      console.error("Failed ad record:", adRecordWithInsights);
-                      continue;
+                      if (adError) {
+                        console.error("Error storing ad:", adError);
+                        console.error("Failed ad record:", adWithInsights);
+                        continue;
+                      }
+
+                      console.log("Successfully stored ad:", ad.id);
+                      adSetAds.push(adWithInsights);
+                    } else {
+                      // Handle the case where there are no insights
                     }
-
-                    console.log("Successfully stored ad:", ad.id);
-                    adSetAds.push(adRecordWithInsights);
                   } catch (error) {
                     console.error(`Error processing ad ${ad.id}:`, error);
                     continue;
