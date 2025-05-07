@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/marketing-ping?secret=${CRON_SECRET}",
+      "path": "/api/cron/marketing-ping?secret=6ccb47c549aeab693bf17b45aa039c16",
       "schedule": "*/5 * * * *"
     }
   ]
